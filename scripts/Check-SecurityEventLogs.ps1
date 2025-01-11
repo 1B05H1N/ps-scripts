@@ -19,15 +19,22 @@
 
 [CmdletBinding()]
 param(
+    [Parameter(Mandatory=$false)]
+    [ValidateRange(1, 720)]
     [int]$Hours = 24,
+    
+    [Parameter(Mandatory=$false)]
+    [ValidateNotNullOrEmpty()]
     [int[]]$EventIDs = @(4624, 4625, 4634)  # default IDs: Logon success, failure, and logoff
 )
 
-try {
-    # Start-Transcript -Path "C:\Logs\Check-SecurityEventLogs_$(Get-Date -Format 'yyyyMMdd_HHmmss').log" -ErrorAction SilentlyContinue
-
-    $timeLimit = (Get-Date).AddHours(-$Hours)
-    Write-Host "Searching Security log for events since $($timeLimit.ToString())..."
+#Requires -RunAsAdministrator
+    # Get events from the Security log with matching IDs
+    $events = Get-WinEvent -FilterHashtable @{
+        LogName = 'Security'
+        ID      = $EventIDs
+        StartTime = $timeLimit
+    } -ErrorAction Stop
 
     # Get events from the Security log with matching IDs
     $events = Get-WinEvent -FilterHashtable @{

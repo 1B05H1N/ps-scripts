@@ -15,22 +15,31 @@ param()
 try {
     # Start-Transcript -Path "C:\Logs\Check-PasswordPolicy_$(Get-Date -Format 'yyyyMMdd_HHmmss').log" -ErrorAction SilentlyContinue
 
-    Write-Host "Checking local password policy..."
+    Write-Host "Checking local password policy..." -ForegroundColor Cyan
 
-    # You can also leverage 'net accounts' for quick retrieval:
-    $netAccounts = net accounts
-    Write-Host "===== 'net accounts' Output ====="
-    Write-Host $netAccounts
+    # Export security policy to a temporary file
+    $secFile = [System.IO.Path]::GetTempFileName()
+    secedit /export /cfg $secFile /quiet
 
-    # Alternatively, gather from registry or WMI:
-    $minPasswordLength = (Get-ItemProperty "HKLM:\SYSTEM\CurrentControlSet\Services\Netlogon\Parameters" -Name "MinimumPasswordLength" -ErrorAction SilentlyContinue).MinimumPasswordLength
-    if ($minPasswordLength) {
-        Write-Host "Minimum Password Length: $minPasswordLength"
-    } else {
-        Write-Host "Minimum Password Length setting not found or not configured in registry."
+    # Read the security policy file
+    $secPolicy = Get-Content $secFile
+    
+    # Parse the security settings
+    $passwordPolicy = @{}
+    $secPolicy | Where-Object { $_ -match '^[^;].*=.*' } | ForEach-Object {
+        $key, $value = $_ -split '='
+        $passwordPolicy[$key.Trim()] = $value.Trim()
     }
 
-    # More checks can be added here (e.g., Maximum Password Age, Password Complexity, etc.)
+    Write-Host "`nPassword Policy Settings:" -ForegroundColor Green
+    Write-Host "Minimum Password Length: $($passwordPolicy['MinimumPasswordLength'])"
+    Write-Host "Maximum Password Age (days): $($passwordPolicy['MaximumPasswordAge'])"
+    Write-Host "Minimum Password Age (days): $($passwordPolicy['MinimumPasswordAge'])"
+    Write-Host "Password History Length: $($passwordPolicy['PasswordHistorySize'])"
+    Write-Host "Password Complexity: $($passwordPolicy['PasswordComplexity'])"
+
+    # Cleanup temp file
+    Remove-Item $secFile -Force
 
 } catch {
     Write-Error "An error occurred while checking password policy: $_"

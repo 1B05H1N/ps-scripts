@@ -16,8 +16,15 @@
 
 [CmdletBinding()]
 param(
+    [Parameter(Mandatory=$false)]
+    [ValidateNotNullOrEmpty()]
     [string]$ArchivePath = "C:\Logs\SecurityBackup.evtx"
 )
+
+# Check for administrative privileges
+if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
+    throw "This script requires administrative privileges. Please run as Administrator."
+}
 
 try {
     # Start-Transcript -Path "C:\Logs\Archive-SecurityLog_$(Get-Date -Format 'yyyyMMdd_HHmmss').log" -ErrorAction SilentlyContinue

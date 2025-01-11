@@ -13,6 +13,21 @@
 [CmdletBinding()]
 param()
 
+# Check for administrator privileges
+function Test-IsAdmin {
+    $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
+    $principal = New-Object Security.Principal.WindowsPrincipal($identity)
+    return $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+    # Common registry paths for local security policies
+    $auditPolicyPath = "HKLM:\System\CurrentControlSet\Control\Lsa"
+    
+    # Verify registry path exists
+    if (-not (Test-Path $auditPolicyPath)) {
+        throw "Could not access required registry path: $auditPolicyPath"
+    }
+    throw "This script requires administrator privileges. Please run as administrator."
+}
+
 try {
     # Start-Transcript -Path "C:\Logs\Check-LocalSecurityPolicy_$(Get-Date -Format 'yyyyMMdd_HHmmss').log" -ErrorAction SilentlyContinue
 

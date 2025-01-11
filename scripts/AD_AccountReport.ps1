@@ -30,6 +30,15 @@ param(
 )
 
 try {
+    # Check if Active Directory module is available
+    if (-not (Get-Module -Name ActiveDirectory)) {
+        Import-Module ActiveDirectory -ErrorAction Stop
+    }
+
+    $newAccounts = Get-ADUser -Filter "WhenCreated -ge '$($startDate.ToString('yyyy-MM-dd'))'" -Properties DisplayName,EmailAddress,whenCreated -ErrorAction Stop
+
+    # Get disabled accounts
+    $disabledAccounts = Get-ADUser -Filter "Enabled -eq 'False'" -Properties DisplayName,EmailAddress,whenCreated -ErrorAction Stop
     # Start-Transcript -Path "C:\Logs\AD_AccountReport_$(Get-Date -Format 'yyyyMMdd').log" -ErrorAction SilentlyContinue
 
     $startDate = (Get-Date).AddDays(-$DaysBack)
