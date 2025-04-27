@@ -3,8 +3,23 @@
     Manages Windows Firewall rules (list, add, or remove).
 
 .DESCRIPTION
-    Allows you to list existing Windows Firewall rules, create a new rule
-    (for inbound or outbound traffic), or remove an existing rule by name.
+    This script provides comprehensive management of Windows Firewall rules with support for
+    multiple protocols, profiles, and port configurations. It allows you to list existing rules,
+    create new rules for inbound or outbound traffic, and remove existing rules by name.
+
+    Features:
+    - List all firewall rules with filtering by profile
+    - Create new rules with support for TCP and UDP protocols
+    - Configure rules for specific programs or port ranges
+    - Apply rules to specific network profiles (Domain, Private, Public)
+    - Comprehensive logging of all operations
+    - Error handling and validation
+
+    The script is particularly useful for:
+    - Security auditing and compliance
+    - Application deployment and configuration
+    - Network security management
+    - Troubleshooting network connectivity issues
 
 .PARAMETER Action
     The firewall action: List, Add, or Remove.
@@ -18,21 +33,43 @@
 .PARAMETER Program
     (Optional) File path for the program this rule applies to.
 
-.PARAMETER RemotePort
-    (Optional) Port number for the firewall rule.
-    Required if you're creating a rule for a specific port.
+.PARAMETER RemotePorts
+    (Optional) Port numbers for the firewall rule.
+    Required if you're creating a rule for multiple ports.
+
+.PARAMETER Protocol
+    (Optional) Protocol for the firewall rule.
+    Default is TCP.
+
+.PARAMETER Profiles
+    (Optional) Network profiles for the firewall rule.
+    Default is "Any".
+
+.PARAMETER LogPath
+    (Optional) Path to the log directory.
+    Default is "C:\Logs\FirewallRules".
 
 .EXAMPLE
     .\Manage-FirewallRules.ps1 -Action List
     Lists all firewall rules.
 
 .EXAMPLE
-    .\Manage-FirewallRules.ps1 -Action Add -RuleName "Allow MyApp" -Direction Inbound -Program "C:\MyApp\app.exe" -RemotePort 8080
-    Adds an inbound rule named "Allow MyApp" allowing TCP traffic on port 8080 for the specified program.
+    .\Manage-FirewallRules.ps1 -Action Add -RuleName "Allow MyApp" -Direction Inbound -Program "C:\MyApp\app.exe" -RemotePorts 8080,8081
+    Adds an inbound rule named "Allow MyApp" allowing TCP traffic on ports 8080 and 8081 for the specified program.
+
+.EXAMPLE
+    .\Manage-FirewallRules.ps1 -Action Add -RuleName "Allow WebServer" -Direction Inbound -Protocol UDP -RemotePorts 53,123 -Profiles Domain,Private
+    Adds a UDP rule for DNS and NTP traffic on domain and private networks.
 
 .EXAMPLE
     .\Manage-FirewallRules.ps1 -Action Remove -RuleName "Allow MyApp"
     Removes the specified firewall rule.
+
+.NOTES
+    Author: Your Name
+    Version: 1.0
+    Date: 2024-04-27
+    Requirements: Windows PowerShell 5.1 or later, Administrative privileges
 #>
 
 [CmdletBinding()]
@@ -47,16 +84,33 @@ param(
 
     [string]$Program,
 
-    [int]$RemotePort
+    [string[]]$RemotePorts,
+
+    [ValidateSet("TCP","UDP","Any")]
+    [string]$Protocol = "TCP",
+
+    [ValidateSet("Domain","Private","Public","Any")]
+    [string[]]$Profiles = @("Any"),
+
+    [string]$LogPath = "C:\Logs\FirewallRules"
 )
 
-try {
-    # Start-Transcript -Path "C:\Logs\Manage-FirewallRules_$(Get-Date -Format 'yyyyMMdd_HHmmss').log" -ErrorAction SilentlyContinue
+# Ensure log directory exists
+if (-not (Test-Path $LogPath)) {
+    New-Item -ItemType Directory -Path $LogPath -Force | Out-Null
+}
 
+$logFile = Join-Path $LogPath "Manage-FirewallRules_$(Get-Date -Format 'yyyyMMdd_HHmmss').log"
+Start-Transcript -Path $logFile -ErrorAction SilentlyContinue
+
+try {
     switch ($Action) {
         "List" {
-            Get-NetFirewallRule |
-                Select-Object DisplayName, Direction, Action, Enabled, Profile |
+            $rules = Get-NetFirewallRule
+            if ($Profiles -ne "Any") {
+                $rules = $rules | Where-Object { $_.Profiles -in $Profiles }
+            }
+            $rules | Select-Object DisplayName, Direction, Action, Enabled, Profile, Protocol |
                 Sort-Object DisplayName
         }
         "Add" {
@@ -64,19 +118,32 @@ try {
                 Write-Error "You must specify -RuleName when adding a firewall rule."
                 return
             }
-            if (-not $RemotePort) {
-                Write-Error "You must specify -RemotePort when adding a firewall rule (for port-based rules)."
+            if (-not $RemotePorts) {
+                Write-Error "You must specify -RemotePorts when adding a firewall rule (for port-based rules)."
                 return
             }
-            New-NetFirewallRule `
-                -DisplayName $RuleName `
-                -Direction $Direction `
-                -Program $Program `
-                -Protocol TCP `
-                -LocalPort $RemotePort `
-                -Action Allow |
-                Out-Null
-            Write-Host "Created firewall rule '$RuleName' ($Direction) on port $RemotePort."
+
+            $params = @{
+                DisplayName = $RuleName
+                Direction = $Direction
+                Action = "Allow"
+            }
+
+            if ($Program) {
+                $params.Program = $Program
+            }
+
+            if ($Protocol -ne "Any") {
+                $params.Protocol = $Protocol
+                $params.LocalPort = $RemotePorts
+            }
+
+            if ($Profiles -ne "Any") {
+                $params.Profile = $Profiles
+            }
+
+            New-NetFirewallRule @params | Out-Null
+            Write-Host "Created firewall rule '$RuleName' ($Direction) on ports $($RemotePorts -join ',') with protocol $Protocol"
         }
         "Remove" {
             if (-not $RuleName) {
@@ -91,5 +158,5 @@ try {
 } catch {
     Write-Error "An error occurred in Manage-FirewallRules: $_"
 } finally {
-    # Stop-Transcript -ErrorAction SilentlyContinue
+    Stop-Transcript -ErrorAction SilentlyContinue
 }
